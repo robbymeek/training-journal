@@ -30,7 +30,7 @@ export const SESSION_TYPES = [
   "Group Practice",
   "Coached Session",
   "Regatta",
-  "Sailing with another boat",
+  "Sailed a different boat",
 ]
 
 export const SAILING_TOPICS = [
