@@ -12,6 +12,7 @@ export default function SailingLog({ knowledgeBase, onSaved }: { knowledgeBase: 
   const [notes, setNotes] = useState("")
   const [summarizing, setSummarizing] = useState(false)
   const [lastResult, setLastResult] = useState<any>(null)
+  const [saveError, setSaveError] = useState("")
 
   const isOtherBoat = sessionType === "Sailed a different boat"
 
@@ -20,92 +21,100 @@ export default function SailingLog({ knowledgeBase, onSaved }: { knowledgeBase: 
     if (!isOtherBoat && !notes.trim()) return
     setSummarizing(true)
     setLastResult(null)
+    setSaveError("")
 
     const windCat = windToCategory(wind)
 
-    // Skip AI for "other boat" sessions — just log time on water
-    let aiResult = null
-    if (!isOtherBoat) {
-      try {
-        const resp = await fetch('/api/summarize', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            rawNotes: notes,
-            existingKB: knowledgeBase,
-            taggedTopics: topics,
-            windCondition: windCat,
-          }),
-        })
-        aiResult = await resp.json()
-      } catch (e) {
-        console.error("Summarization failed:", e)
+    try {
+      // Skip AI for "other boat" sessions — just log time on water
+      let aiResult = null
+      if (!isOtherBoat) {
+        try {
+          const resp = await fetch('/api/summarize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              rawNotes: notes,
+              existingKB: knowledgeBase,
+              taggedTopics: topics,
+              windCondition: windCat,
+            }),
+          })
+          aiResult = await resp.json()
+        } catch (e) {
+          console.error("Summarization failed:", e)
+          // Continue without AI — save notes as-is
+        }
       }
-    }
 
-    // Save sailing entry
-    await addSailingEntry({
-      date: new Date().toISOString(),
-      wind,
-      wind_cat: windCat,
-      session_type: isOtherBoat ? "other" : sessionType,
-      topics: isOtherBoat ? [] : topics,
-      raw_notes: isOtherBoat ? "" : notes,
-      summary: isOtherBoat ? "Sailed a different boat" : (aiResult?.summary || notes.slice(0, 200)),
-      key_insights: aiResult?.keyInsights || [],
-    })
+      // Save sailing entry
+      await addSailingEntry({
+        date: new Date().toISOString(),
+        wind,
+        wind_cat: windCat,
+        session_type: isOtherBoat ? "other" : sessionType,
+        topics: isOtherBoat ? [] : topics,
+        raw_notes: isOtherBoat ? "" : notes,
+        summary: isOtherBoat ? "Sailed a different boat" : (aiResult?.summary || notes.slice(0, 200)),
+        key_insights: aiResult?.keyInsights || [],
+      })
 
-    // Update knowledge base
-    const isDup = (text: string) =>
-      aiResult?.alerts?.duplicates?.some((d: string) => d.toLowerCase().includes(text.toLowerCase().slice(0, 30)))
+      // Update knowledge base
+      const isDup = (text: string) =>
+        aiResult?.alerts?.duplicates?.some((d: string) => d.toLowerCase().includes(text.toLowerCase().slice(0, 30)))
 
-    if (aiResult?.sailingInsights) {
-      for (const [subTopic, text] of Object.entries(aiResult.sailingInsights)) {
-        if (!isDup(text as string)) {
-          await addKnowledgeInsight({ section: 'sailing', category: windCat, sub_topic: subTopic, insight: text as string, wind, source_date: new Date().toISOString() })
+      if (aiResult?.sailingInsights) {
+        for (const [subTopic, text] of Object.entries(aiResult.sailingInsights)) {
+          if (!isDup(text as string)) {
+            await addKnowledgeInsight({ section: 'sailing', category: windCat, sub_topic: subTopic, insight: text as string, wind, source_date: new Date().toISOString() })
+          }
         }
       }
-    }
-    if (aiResult?.boathandlingInsights) {
-      for (const [subTopic, text] of Object.entries(aiResult.boathandlingInsights)) {
-        if (!isDup(text as string)) {
-          await addKnowledgeInsight({ section: 'boathandling', category: subTopic, insight: text as string, wind, source_date: new Date().toISOString() })
+      if (aiResult?.boathandlingInsights) {
+        for (const [subTopic, text] of Object.entries(aiResult.boathandlingInsights)) {
+          if (!isDup(text as string)) {
+            await addKnowledgeInsight({ section: 'boathandling', category: subTopic, insight: text as string, wind, source_date: new Date().toISOString() })
+          }
         }
       }
-    }
-    if (aiResult?.conceptInsights) {
-      for (const [conceptId, text] of Object.entries(aiResult.conceptInsights)) {
-        if (!isDup(text as string)) {
-          await addKnowledgeInsight({ section: 'concepts', category: conceptId, insight: text as string, source_date: new Date().toISOString() })
+      if (aiResult?.conceptInsights) {
+        for (const [conceptId, text] of Object.entries(aiResult.conceptInsights)) {
+          if (!isDup(text as string)) {
+            await addKnowledgeInsight({ section: 'concepts', category: conceptId, insight: text as string, source_date: new Date().toISOString() })
+          }
         }
       }
-    }
-    if (aiResult?.tacticInsights) {
-      for (const [tacticId, text] of Object.entries(aiResult.tacticInsights)) {
-        if (!isDup(text as string)) {
-          await addKnowledgeInsight({ section: 'tactics', category: tacticId, insight: text as string, source_date: new Date().toISOString() })
+      if (aiResult?.tacticInsights) {
+        for (const [tacticId, text] of Object.entries(aiResult.tacticInsights)) {
+          if (!isDup(text as string)) {
+            await addKnowledgeInsight({ section: 'tactics', category: tacticId, insight: text as string, source_date: new Date().toISOString() })
+          }
         }
       }
-    }
-    if (aiResult?.venueInsights) {
-      for (const [venue, text] of Object.entries(aiResult.venueInsights)) {
-        if (!isDup(text as string)) {
-          await addKnowledgeInsight({ section: 'venues', category: venue, insight: text as string, wind, source_date: new Date().toISOString() })
+      if (aiResult?.venueInsights) {
+        for (const [venue, text] of Object.entries(aiResult.venueInsights)) {
+          if (!isDup(text as string)) {
+            await addKnowledgeInsight({ section: 'venues', category: venue, insight: text as string, wind, source_date: new Date().toISOString() })
+          }
         }
       }
-    }
-    if (aiResult?.regattaInsights) {
-      for (const [regatta, text] of Object.entries(aiResult.regattaInsights)) {
-        if (!isDup(text as string)) {
-          await addKnowledgeInsight({ section: 'regattas', category: regatta, insight: text as string, wind, source_date: new Date().toISOString() })
+      if (aiResult?.regattaInsights) {
+        for (const [regatta, text] of Object.entries(aiResult.regattaInsights)) {
+          if (!isDup(text as string)) {
+            await addKnowledgeInsight({ section: 'regattas', category: regatta, insight: text as string, wind, source_date: new Date().toISOString() })
+          }
         }
       }
-    }
 
-    setLastResult(aiResult)
-    setSummarizing(false)
-    setNotes(""); setTopics([]); setWind(""); setSessionType("")
-    onSaved()
+      setLastResult(aiResult)
+      setNotes(""); setTopics([]); setWind(""); setSessionType("")
+      onSaved()
+    } catch (e: any) {
+      console.error("Save failed:", e)
+      setSaveError(e?.message || "Save failed. Check your connection and try again.")
+    } finally {
+      setSummarizing(false)
+    }
   }
 
   const ready = wind && sessionType && !summarizing && (isOtherBoat || notes.trim())
@@ -149,6 +158,10 @@ export default function SailingLog({ knowledgeBase, onSaved }: { knowledgeBase: 
             }}
           />
         </>
+      )}
+
+      {saveError && (
+        <p style={{ fontSize: 12, color: "#ef4444", marginBottom: 8 }}>{saveError}</p>
       )}
 
       <button onClick={submit} disabled={!ready}
