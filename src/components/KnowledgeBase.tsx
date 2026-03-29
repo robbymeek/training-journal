@@ -11,7 +11,7 @@ function fmtDate(iso: string) {
 function countInsights(obj: any): number {
   if (!obj) return 0
   if (Array.isArray(obj)) return obj.length
-  return Object.values(obj).reduce((sum: number, v: any) => sum + countInsights(v), 0)
+  return Object.values(obj).reduce<number>((sum, v: any) => sum + countInsights(v), 0)
 }
 
 function renderInsights(items: any[]) {
