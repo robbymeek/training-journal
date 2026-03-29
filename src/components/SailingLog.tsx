@@ -117,7 +117,7 @@ export default function SailingLog({ knowledgeBase, onSaved }: { knowledgeBase: 
     }
   }
 
-  const ready = wind && sessionType && !summarizing && (isOtherBoat || notes.trim())
+  const ready = Boolean(wind && sessionType && !summarizing && (isOtherBoat || notes.trim()))
 
   return (
     <div>
